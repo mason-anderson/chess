@@ -7,19 +7,19 @@ import Data.Array
 import qualified Data.Map as M
 import System.Directory
 
-import Debug.Trace
-
 import Game
 import Data.Maybe
 
 data World = MkWorld
     { textures :: M.Map String Picture
+    , bottomColor :: PColor
     , dragged :: (Int, Int)
     , turn :: PColor
     , mousePos :: (Float,Float)
     , board :: Board
     }
 
+-- make (0,0) the top left of the screen
 translateTopLeft :: Picture -> Picture
 translateTopLeft = translate (-windowSize / 2) (windowSize / 2)
 
@@ -36,17 +36,20 @@ window = InWindow "Chess" (windowSize, windowSize) (offset, offset)
 
 squareSize = 100
 
+-- get the Picture for the current square (a piece or empty)
 getSquarePicture :: World -> Square -> Picture
 getSquarePicture w (SPiece p c) = textures w M.! (show p ++ show c)
 getSquarePicture _ SEmpty = blank
 
-getBoardPos :: (Float,Float) -> Maybe (Int,Int)
-getBoardPos (x,y) = if bx >= 0 && bx < 8 && by >= 0 && by < 8
-                      then Just (bx,by)
-                      else Nothing
+getBoardPos :: PColor -> (Float,Float) -> Maybe (Int,Int)
+getBoardPos bottomColor (x,y) = if bx >= 0 && bx < 8 && by >= 0 && by < 8
+    then Just (bx,by)
+    else Nothing
     where
         bx = round $ (x + windowSize / 2) / squareSize - 1
-        by = round $ 9 - (y + windowSize / 2) / squareSize
+        by = if bottomColor == White
+            then round $ (y + windowSize / 2) / squareSize - 2
+            else round $ 9 - (y + windowSize / 2) / squareSize
 
 drawBoard :: Picture
 drawBoard = pictures $ do
@@ -66,8 +69,12 @@ drawPieces w = pictures $ do
     file <- [1..8]
     rank <- [1..8]
 
-    let moveBoardPos = translate ( fromIntegral file * squareSize)
-                                 (-fromIntegral rank * squareSize)
+    let moveBoardPos = if bottomColor w == White
+        then translate ( fromIntegral file * squareSize)
+                       (-fromIntegral (9 - rank) * squareSize)
+        else translate ( fromIntegral file * squareSize)
+                       (-fromIntegral rank * squareSize)
+
     let square = board w ! (file - 1,rank - 1)
     let squareTex = getSquarePicture w square
 
@@ -75,6 +82,7 @@ drawPieces w = pictures $ do
         then pure blank
         else pure $ moveBoardPos squareTex
 
+-- draw the piece being dragged by the mouse
 drawDragged :: World -> Picture
 drawDragged w = if dragged w == (-1,-1)
     then blank
@@ -93,16 +101,16 @@ render w = translateTopLeft $ pictures
 handleKeyEvents :: Event -> World -> World
 handleKeyEvents (EventMotion p) world = world { mousePos = p }
 handleKeyEvents (EventKey (MouseButton LeftButton) Down _ (x,y)) world =
-    case getBoardPos (x,y) of
+    case getBoardPos (bottomColor world) (x,y) of
         Just (bx,by) -> world {dragged = (bx,by)}
         Nothing -> world
 handleKeyEvents (EventKey (MouseButton LeftButton) Up _ (x,y)) world = world {
         dragged = (-1,-1),
-        board = case getBoardPos (x,y) of
+        board = case getBoardPos (bottomColor world) (x,y) of
             Just p -> move (dragged world) p $ board world
             Nothing -> board world
         }
-handleKeyEvents (EventKey (Char 'p') Down _ _) world = trace (show $ dragged world) world
+handleKeyEvents (EventKey (Char 'p') Down _ _) world = world
 handleKeyEvents _ world = world
 
 update :: Float -> World -> World
@@ -111,6 +119,7 @@ update _ = id
 initialState :: World
 initialState = MkWorld
     M.empty
+    White
     (-1,-1)
     White
     (0,0)

@@ -48,14 +48,15 @@ move i f b = if f `elem` legalSquares
         piece = b ! i
         legalSquares :: [Pos]
         legalSquares = case piece of
-            -- (SPiece Pawn c) -> [new_pos | b ! new_pos == SEmpty]
-                -- ++ [f new_pos | f <- [first (+1), first (subtract 1)] , getColor (b ! f new_pos) == Just White]
-                    -- where new_pos = (if c == White then second (+1) else second (subtract 1)) i
-            (SPiece Pawn c) -> filter (legal c) [bimap (+1) dir i, bimap (subtract 1) dir i] ++ [x | x <- [second dir i], onBoard x && b ! x == SEmpty]
+            (SPiece Pawn c) -> filter (legalTake c) [bimap (+1) dir i, bimap (subtract 1) dir i] ++ [x | x <- [second dir i], onBoard x && b ! x == SEmpty]
                 where dir = if c == White then (+1) else subtract 1
+                      legalTake c x = onBoard x && (case b ! x of
+                                SEmpty -> False
+                                (SPiece _ c2) -> c2 /= c
+                          )
 
             (SPiece Bishop c) -> concat [path c i x y | x <- [-1, 1], y <- [-1, 1]]
-            (SPiece Knight c) -> undefined
+            (SPiece Knight c) -> filter (legal c) [(fst i +x,snd i + y) | x<-[1,-1,2,-2], y<-[1,-1,2,-2], abs x  /= abs y]
             (SPiece Rook c) -> concat [bPath 1 0, bPath (-1) 0, bPath 0 1, bPath 0 (-1)]
                 where bPath = path c i
             (SPiece King c) -> filter (legal c) [(fst i + x,snd i + y) | x <-[-1,0,1], y <- [-1,0,1], x /= 0 || y /= 0]
