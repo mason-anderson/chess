@@ -18,6 +18,10 @@ getColor :: Square -> Maybe PColor
 getColor SEmpty = Nothing
 getColor (SPiece _ c) = Just c
 
+oppositeColor :: PColor -> PColor
+oppositeColor White = Black
+oppositeColor Black = White
+
 onBoard :: Pos -> Bool
 onBoard (x,y) = x >= 0 && x < 8 && y >= 0 && y < 8
 
@@ -40,16 +44,27 @@ initialBoard = listArray ((0,0),(7,7)) $ concat $ transpose
         pawns = SPiece Pawn <$ [1..8]
         pieces = [SPiece Rook, SPiece Knight, SPiece Bishop, SPiece Queen, SPiece King, SPiece Bishop, SPiece Knight, SPiece Rook]
 
-move :: Pos -> Pos -> Board -> Board
-move i f b = if f `elem` legalSquares
-    then b // [(i, SEmpty), (f, b ! i)]
-    else b
+checkMate :: Board -> Maybe PColor
+checkMate b = undefined
+
+legalMove :: Pos -> Pos -> (Pos,Pos) -> Board -> Bool
+legalMove iPos fPos lastMove board = movePossible iPos fPos board
+
+inCheck :: Board -> PColor
+inCheck b = undefined
+
+-- checks if a move is possible (not including moving in check)
+movePossible :: Pos -> Pos -> Board -> Bool
+movePossible i f b = if f `elem` legalSquares
+    then True
+    else False
     where
         piece = b ! i
+        -- return a list of legal squares for the piece at i
         legalSquares :: [Pos]
         legalSquares = case piece of
-            (SPiece Pawn c) -> filter (legalTake c) [bimap (+1) dir i, bimap (subtract 1) dir i] ++ [x | x <- [second dir i], onBoard x && b ! x == SEmpty]
-                where dir = if c == White then (+1) else subtract 1
+            (SPiece Pawn c) -> filter (legalTake c) [bimap (+1) (dir 1) i, bimap (subtract 1) (dir 1) i] ++ [x | x <- [second (dir 1) i, second (dir 2) i], onBoard x && b ! x == SEmpty]
+                where dir x = if c == White then (+x) else subtract x
                       legalTake c x = onBoard x && (case b ! x of
                                 SEmpty -> False
                                 (SPiece _ c2) -> c2 /= c

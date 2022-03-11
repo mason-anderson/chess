@@ -101,15 +101,31 @@ render w = translateTopLeft $ pictures
 handleKeyEvents :: Event -> World -> World
 handleKeyEvents (EventMotion p) world = world { mousePos = p }
 handleKeyEvents (EventKey (MouseButton LeftButton) Down _ (x,y)) world =
-    case getBoardPos (bottomColor world) (x,y) of
-        Just (bx,by) -> world {dragged = (bx,by)}
-        Nothing -> world
-handleKeyEvents (EventKey (MouseButton LeftButton) Up _ (x,y)) world = world {
-        dragged = (-1,-1),
-        board = case getBoardPos (bottomColor world) (x,y) of
-            Just p -> move (dragged world) p $ board world
-            Nothing -> board world
-        }
+    case (board world !) <$> getBoardPos (bottomColor world) (x,y) of
+        Just (SPiece _ c) -> if c == turn world
+            then world {dragged = fromJust $ getBoardPos (bottomColor world) (x,y)}
+            else world
+        _ -> world
+-- handleKeyEvents (EventKey (MouseButton LeftButton) Up _ (x,y)) world = if dragged world /= (-1,-1)
+--     then world
+--         { dragged = (-1,-1)
+--         , board = case getBoardPos (bottomColor world) (x,y) of
+--             Just p -> if legalMove (dragged world) p ((0,0),(0,0)) $ board world
+--                 then board world // [(dragged world, SEmpty), (p, board world ! (dragged world))]
+--                 else board world
+--             Nothing -> board world
+--         , turn = if turn world == White then Black else White
+--         }
+--     else world
+handleKeyEvents (EventKey (MouseButton LeftButton) Up _ (x,y)) world = if dragged world /= (-1,-1)
+    then case getBoardPos (bottomColor world) (x,y) of
+        Just fPos -> if legalMove iPos fPos ((0,0),(0,0)) b
+            then world {board = board world // [(dragged world, SEmpty), (fPos, board world ! (dragged world))], turn = if turn world == White then Black else White, dragged = (-1,-1)}
+            else world {dragged = (-1,-1)}
+    else world {dragged = (-1,-1)}
+    where
+        b = board world
+        iPos = dragged world
 handleKeyEvents (EventKey (Char 'p') Down _ _) world = world
 handleKeyEvents _ world = world
 
@@ -134,7 +150,6 @@ main = do
                 Nothing -> pure Nothing
                 Just img -> pure $ Just (drop 4 $ reverse $ drop 4 $ reverse x,img)
     imgs <- catMaybes <$> mapM (f . ("res/" ++)) imgPaths
-    print imgs
 
     let initialState' = initialState { textures = M.fromList imgs}
     play window background fps initialState' render handleKeyEvents update
