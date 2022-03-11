@@ -41,6 +41,7 @@ getSquarePicture :: World -> Square -> Picture
 getSquarePicture w (SPiece p c) = textures w M.! (show p ++ show c)
 getSquarePicture _ SEmpty = blank
 
+-- return the coordinate of the square a position is in
 getBoardPos :: PColor -> (Float,Float) -> Maybe (Int,Int)
 getBoardPos bottomColor (x,y) = if bx >= 0 && bx < 8 && by >= 0 && by < 8
     then Just (bx,by)
@@ -106,23 +107,17 @@ handleKeyEvents (EventKey (MouseButton LeftButton) Down _ (x,y)) world =
             then world {dragged = fromJust $ getBoardPos (bottomColor world) (x,y)}
             else world
         _ -> world
--- handleKeyEvents (EventKey (MouseButton LeftButton) Up _ (x,y)) world = if dragged world /= (-1,-1)
---     then world
---         { dragged = (-1,-1)
---         , board = case getBoardPos (bottomColor world) (x,y) of
---             Just p -> if legalMove (dragged world) p ((0,0),(0,0)) $ board world
---                 then board world // [(dragged world, SEmpty), (p, board world ! (dragged world))]
---                 else board world
---             Nothing -> board world
---         , turn = if turn world == White then Black else White
---         }
---     else world
 handleKeyEvents (EventKey (MouseButton LeftButton) Up _ (x,y)) world = if dragged world /= (-1,-1)
     then case getBoardPos (bottomColor world) (x,y) of
         Just fPos -> if legalMove iPos fPos ((0,0),(0,0)) b
-            then world {board = board world // [(dragged world, SEmpty), (fPos, board world ! (dragged world))], turn = if turn world == White then Black else White, dragged = (-1,-1)}
+            then world
+            { board = board world // [(dragged world, SEmpty), (fPos, board world ! dragged world)]
+            , turn = if turn world == White then Black else White
+            , dragged = (-1,-1)
+            }
             else world {dragged = (-1,-1)}
-    else world {dragged = (-1,-1)}
+        Nothing -> world {dragged = (-1,-1)}
+    else world
     where
         b = board world
         iPos = dragged world

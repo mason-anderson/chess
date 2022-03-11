@@ -55,9 +55,7 @@ inCheck b = undefined
 
 -- checks if a move is possible (not including moving in check)
 movePossible :: Pos -> Pos -> Board -> Bool
-movePossible i f b = if f `elem` legalSquares
-    then True
-    else False
+movePossible i f b = f `elem` legalSquares
     where
         piece = b ! i
         -- return a list of legal squares for the piece at i
