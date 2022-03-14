@@ -42,16 +42,20 @@ getSquarePicture w (SPiece p c) = textures w M.! (show p ++ show c)
 getSquarePicture _ SEmpty = blank
 
 -- return the coordinate of the square a position is in
+-- flip horizontally and vertically if black is on the bottom
 getBoardPos :: PColor -> (Float,Float) -> Maybe (Int,Int)
 getBoardPos bottomColor (x,y) = if bx >= 0 && bx < 8 && by >= 0 && by < 8
     then Just (bx,by)
     else Nothing
     where
-        bx = round $ (x + windowSize / 2) / squareSize - 1
+        bx = if bottomColor == White
+            then round $ (x + windowSize / 2) / squareSize - 1
+            else round $ 9 - (x + windowSize / 2) / squareSize - 1
         by = if bottomColor == White
             then round $ (y + windowSize / 2) / squareSize - 2
             else round $ 9 - (y + windowSize / 2) / squareSize
 
+-- draw the board underneath the pieces
 drawBoard :: Picture
 drawBoard = pictures $ do
     file <- [1..8]
@@ -65,6 +69,7 @@ drawBoard = pictures $ do
         then color white square'
         else color lightBlue square'
 
+-- draw the pieces
 drawPieces :: World -> Picture
 drawPieces w = pictures $ do
     file <- [1..8]
@@ -73,7 +78,7 @@ drawPieces w = pictures $ do
     let moveBoardPos = if bottomColor w == White
         then translate ( fromIntegral file * squareSize)
                        (-fromIntegral (9 - rank) * squareSize)
-        else translate ( fromIntegral file * squareSize)
+        else translate ( fromIntegral (9 - file) * squareSize)
                        (-fromIntegral rank * squareSize)
 
     let square = board w ! (file - 1,rank - 1)
@@ -121,7 +126,7 @@ handleKeyEvents (EventKey (MouseButton LeftButton) Up _ (x,y)) world = if dragge
     where
         b = board world
         iPos = dragged world
-handleKeyEvents (EventKey (Char 'p') Down _ _) world = world
+handleKeyEvents (EventKey (Char 'f') Down _ _) world = world {bottomColor = oppositeColor (bottomColor world)}
 handleKeyEvents _ world = world
 
 update :: Float -> World -> World
