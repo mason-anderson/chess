@@ -6,18 +6,21 @@ import Graphics.Gloss.Juicy
 import Data.Array
 import qualified Data.Map as M
 import System.Directory
-
-import Game
 import Data.Maybe
 
+import Game
+
+-- the state of the whole game
 data World = MkWorld
     { textures :: M.Map String Picture
     , bottomColor :: PColor
     , dragged :: (Int, Int)
     , turn :: PColor
     , mousePos :: (Float,Float)
-    , board :: Board
+    , gameState :: GameState
     }
+
+board = gsBoard . gameState
 
 -- make (0,0) the top left of the screen
 translateTopLeft :: Picture -> Picture
@@ -114,9 +117,9 @@ handleKeyEvents (EventKey (MouseButton LeftButton) Down _ (x,y)) world =
         _ -> world
 handleKeyEvents (EventKey (MouseButton LeftButton) Up _ (x,y)) world = if dragged world /= (-1,-1)
     then case getBoardPos (bottomColor world) (x,y) of
-        Just fPos -> if legalMove iPos fPos ((0,0),(0,0)) b
+        Just fPos -> if legalMove iPos fPos gs
             then world
-            { board = board world // [(dragged world, SEmpty), (fPos, board world ! dragged world)]
+            { gameState = makeMove iPos fPos gs
             , turn = if turn world == White then Black else White
             , dragged = (-1,-1)
             }
@@ -125,6 +128,7 @@ handleKeyEvents (EventKey (MouseButton LeftButton) Up _ (x,y)) world = if dragge
     else world
     where
         b = board world
+        gs = gameState world
         iPos = dragged world
 handleKeyEvents (EventKey (Char 'f') Down _ _) world = world {bottomColor = oppositeColor (bottomColor world)}
 handleKeyEvents _ world = world
@@ -139,16 +143,18 @@ initialState = MkWorld
     (-1,-1)
     White
     (0,0)
-    initialBoard
+    ( MkGameState initialBoard ((0,0),(0,0)) (False,False) (False,False) (False,False) )
 
 main :: IO ()
 main = do
+    -- load images of pieces
     imgPaths <- getDirectoryContents imageFolder
     let f x = do
+            let imgName = drop 4 $ reverse $ drop 4 $ reverse x
             img <- loadJuicyPNG x
             case img of
                 Nothing -> pure Nothing
-                Just img -> pure $ Just (drop 4 $ reverse $ drop 4 $ reverse x,img)
+                Just img -> pure $ Just (imgName,scale 1.3 1.3 img)
     imgs <- catMaybes <$> mapM (f . ("res/" ++)) imgPaths
 
     let initialState' = initialState { textures = M.fromList imgs}
