@@ -1,5 +1,4 @@
 module Main where
-
 import Graphics.Gloss
 import Graphics.Gloss.Interface.Pure.Game
 import Graphics.Gloss.Juicy
@@ -143,7 +142,7 @@ initialState = MkWorld
     (-1,-1)
     White
     (0,0)
-    ( MkGameState initialBoard ((0,0),(0,0)) (False,False) (False,False) (False,False) )
+    initialGameState
 
 main :: IO ()
 main = do

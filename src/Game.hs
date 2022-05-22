@@ -5,8 +5,6 @@ import Data.List
 import Data.Bifunctor
 import Data.Maybe
 
-import Debug.Trace
-
 data PColor = White | Black
     deriving (Eq, Show)
 data Piece = Pawn | Bishop | Knight | Rook | King | Queen
@@ -31,6 +29,10 @@ getColor :: Square -> Maybe PColor
 getColor SEmpty = Nothing
 getColor (SPiece _ c) = Just c
 
+getPiece :: Square -> Maybe Piece
+getPiece SEmpty = Nothing
+getPiece (SPiece p _) = Just p
+
 oppositeColor :: PColor -> PColor
 oppositeColor White = Black
 oppositeColor Black = White
@@ -49,22 +51,6 @@ initialGameState = MkGameState
 
 -- >>> initialBoard ! (3,0)
 -- SPiece Queen White
-
-board2 :: Board
-board2 = listArray ((0,0),(7,7)) $ concat $ transpose
-    [ [SPiece Rook White, SEmpty, SEmpty, SEmpty, SPiece King White, SEmpty, SEmpty, SEmpty]
-    , map ($ White) pawns
-    , empty
-    , empty
-    , empty
-    , empty
-    , map ($ Black) pawns
-    , [SPiece Rook Black, SEmpty, SEmpty, SEmpty, SPiece King Black, SEmpty, SEmpty, SEmpty]
-    ]
-    where
-        empty = SEmpty <$ [1..8]
-        pawns = SPiece Pawn <$ [1..8]
-
 
 initialBoard :: Board
 initialBoard = listArray ((0,0),(7,7)) $ concat $ transpose
@@ -87,17 +73,27 @@ checkMate b = undefined
 
 -- makes the move doing extra work for special moves like castling or taking en passant
 makeMove :: Pos -> Pos -> GameState -> GameState
-makeMove iPos fPos gs = if piece == King && (abs dx > 1) -- check for castle
-    then gs {gsBoard = board // [(iPos, SEmpty)
-                                , (fPos, board ! iPos)
-                                , (rookPos, SEmpty)
-                                , ((if dx > 0 then fst fPos - 1 else fst fPos + 1,snd fPos), SPiece Rook color)
-                                ] } -- castle move
-    else gs {gsBoard = board // [(iPos, SEmpty), (fPos, board ! iPos)]} -- regular move
+makeMove iPos fPos gs = gs
+    { gsBoard = if piece == King && abs dx > 1 -- castle
+        then board // [ (iPos, SEmpty)
+                           , (fPos, board ! iPos)
+                           , (rookPos, SEmpty)
+                           , ((if dx > 0 then fst fPos - 1 else fst fPos + 1,snd fPos), SPiece Rook color)
+                           ]
+        else if piece == Pawn && abs dx == 1 && board ! fPos == SEmpty -- en passant
+            then board // [ (iPos, SEmpty)
+                            , (fPos, board ! iPos)
+                            , ((fst fPos, snd fPos - dy), SEmpty)
+                            ]
+            -- regular move from iPos to fPos
+            else board // [(iPos, SEmpty), (fPos, board ! iPos)]
+    , gsLastMove = (iPos,fPos)
+    }
     where
         piece = case board ! iPos of SPiece p _ -> p
         color = case board ! iPos of SPiece _ c -> c
         dx = fst fPos - fst iPos
+        dy = snd fPos - snd iPos
         rookPos = (if dx > 0 then 7 else 0, snd iPos)
         board = gsBoard gs
 
@@ -130,20 +126,27 @@ movePossible i f gs = f `elem` legalSquares
         legalSquares = case piece of
             (SPiece Pawn c) -> filter (isLegalTake c) [ bimap (+1) (dir 1) i, bimap (subtract 1) (dir 1) i] -- take on diagonals
                             ++ moveOne -- move 1
-                            ++ [x | x<-[second (dir 2) i], not (null moveOne) && b ! x == SEmpty && (snd i == 1 || snd i == 6)] -- move 2 (first move only)
+                            ++ [x | x<-[second (dir 2) i]
+                                  , not (null moveOne) && b ! x == SEmpty && (snd i == 1 || snd i == 6)] -- move 2
                 -- dir returns the direction of movement for the correct color
                 where dir x = if c == White then (+x) else subtract x
                       moveOne = [x | x<-[second (dir 1) i], onBoard x && b ! x == SEmpty]
                       isLegalTake c x = onBoard x && (case b ! x of
-                                SEmpty -> False
+                                -- regular take
                                 (SPiece _ c2) -> c2 /= c
-                          )
+                                -- otherwise check for en passant
+                                SEmpty -> fromJust (getPiece $ b ! snd lastMove) == Pawn -- last move is pawn
+                                       && abs (snd (fst lastMove) - snd (snd lastMove)) == 2 -- last move is two spaces
+                                       && fst (snd lastMove) == fst x -- last move is in front of take
+                                       && dir 1 (snd (snd lastMove)) == snd x
+                             )
+                      lastMove =  gsLastMove gs
 
             (SPiece Bishop c) -> concat [path c i x y | x <- [-1, 1], y <- [-1, 1]]
             (SPiece Knight c) -> filter (legal c) [(fst i +x,snd i + y) | x<-[1,-1,2,-2], y<-[1,-1,2,-2], abs x  /= abs y]
             (SPiece Rook c) -> concat [bPath 1 0, bPath (-1) 0, bPath 0 1, bPath 0 (-1)]
                 where bPath = path c i
-            (SPiece King c) -> trace (show canShortCastle) $ filter (legal c) [(fst i + x,snd i + y) | x <-[-1,0,1], y <- [-1,0,1], x /= 0 || y /= 0]
+            (SPiece King c) ->  filter (legal c) [(fst i + x,snd i + y) | x <-[-1,0,1], y <- [-1,0,1], x /= 0 || y /= 0]
                             ++ [(fst i + 2, snd i) | canShortCastle] -- short castle
                             ++ [(fst i - 2, snd i) | canLongCastle] -- long castle
                 where
@@ -153,14 +156,14 @@ movePossible i f gs = f `elem` legalSquares
                             then not $ fst (gsKingMoved gs) || fst (gsKRookMoved gs)
                             else not $ snd (gsKingMoved gs) || snd (gsKRookMoved gs)
                         )&& -- check if pieces are in the way
-                        and [(b ! (x, snd i)) == SEmpty | x <- [5,6]]
+                        and [b ! (x, snd i) == SEmpty | x <- [5,6]]
                     canLongCastle =
                         -- check if king or rook has moved
                         (if c == White
                             then not $ fst (gsKingMoved gs) || fst (gsQRookMoved gs)
                             else not $ snd (gsKingMoved gs) || snd (gsQRookMoved gs)
                         )&& -- check if pieces are in the way
-                        and [(b ! (x, snd i)) == SEmpty | x <- [1,2,3]]
+                        and [b ! (x, snd i) == SEmpty | x <- [1,2,3]]
             (SPiece Queen c) -> concat [path c i x y | x <- [-1,0,1], y <- [-1,0,1], x /= 0 || y /= 0]
             _ -> []
 
@@ -169,6 +172,7 @@ movePossible i f gs = f `elem` legalSquares
                 SEmpty -> True
                 (SPiece _ c2) -> c2 /= c
             )
+        -- generate a list of positions in a path with a start and direction
         path :: PColor -> Pos -> Int -> Int -> [Pos]
         path c p@(x,y) dx dy = if not (onBoard p')
             then []
